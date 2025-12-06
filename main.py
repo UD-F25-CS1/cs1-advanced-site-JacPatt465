@@ -14,6 +14,7 @@ Mao but worse
     [],
 )
 
+hide_debug_information()
 
 @dataclass
 class Rules:
@@ -56,22 +57,37 @@ def start(state: State) -> Page:
     return start_game_round(state)
 
 
+
 @route
 def start_game_round(state: State) -> Page:
-    card_obj = state.player_card_hand[0]
-    card_value = str(card_obj.number)
-    if card_value == "11":
-        display = "J"
-    elif card_value == "12":
-        display = "Q"
-    elif card_value == "13":
-        display = "K"
+    if not state.dealer_card_hand:
+        return Page(state, ["Dealer has no cards."])
+    dealer_card_value = str(state.dealer_card_hand[0].number)
+    state.last_card_played = str(state.dealer_card_hand[0].number)
+
+
+    if dealer_card_value == "11":
+        dealer_display = "J"
+    elif dealer_card_value == "12":
+        dealer_display = "Q"
+    elif dealer_card_value == "13":
+        dealer_display = "K"
     else:
-        display = card_value
+        dealer_display = dealer_card_value
+
+    player_card_value = str(state.player_card_hand[0].number)
+    if player_card_value == "11":
+        player_display = "J"
+    elif player_card_value == "12":
+        player_display = "Q"
+    elif player_card_value == "13":
+        player_display = "K"
+    else:
+        player_display = player_card_value
 
     return Page(state, [
-        "Last card played was " + state.last_card_played,
-        "You are playing " + display,
+        "Dealer played: " + dealer_display,
+        "You are playing: " + player_display,
         "Type the rule that applies. If no rule applies, type 'none'",
         TextBox("rule"),
         Button("Submit", "/player_plays")
@@ -80,33 +96,32 @@ def start_game_round(state: State) -> Page:
 
 @route
 def player_plays(state: State, rule: str) -> Page:
-    current_card = str(state.player_card_hand[0].number)
-    state.last_card_played = current_card
-    matched_rule = rule_filtered(state, current_card)
+    dealer_card = str(state.dealer_card_hand[0].number) if state.dealer_card_hand else ""
+    player_card = str(state.player_card_hand[0].number)
+    matched_rule = rule_filtered(state, player_card)
     if rule.lower().strip() == "none":
         if matched_rule.title == "none":
             return player_succeed(state)
         else:
             return player_punished(state, matched_rule)
-
-
     if matched_rule.title != "none" and rule.strip() == matched_rule.title:
         return player_succeed(state)
-    else:
-        return player_punished(state, matched_rule)
+    return player_punished(state, matched_rule)
+
 
 
 
 def rule_filtered(state: State, card_played: str) -> Rules:
-    last = state.last_card_played
+    last = state.last_card_played or ""
     for rule in state.game_ruleset:
-        above = rule.card_played.split(",")
-        below = rule.card_below.split(",")
-
+        above = [s.strip() for s in rule.card_played.split(",") if s.strip() != ""]
+        below = [s.strip() for s in rule.card_below.split(",") if s.strip() != ""]
         if card_played in above and last in below:
             return rule
 
     return Rules("none", "", True, "", "")
+
+
 
 
 
@@ -115,6 +130,7 @@ def player_punished(state: State, rule: Rules) -> Page:
     if len(state.dealer_card_hand) > 1:
         card = state.dealer_card_hand.pop(0)
         state.player_card_hand.append(card)
+        state.last_card_played = str(state.dealer_card_hand[0].number)
 
         return Page(state, [
             Header("You were punished!"),
@@ -123,17 +139,6 @@ def player_punished(state: State, rule: Rules) -> Page:
             Text(rule.description),
             Button("Continue", "/start_game_round")
         ])
-    else:
-        return Page(
-            state,
-            [
-                Header("You've Lost."),
-                Header("The rule was:", 2),
-                Header(rule.title, 3),
-                Text(rule.description)
-            ]
-        )
-
 
 @route
 def player_succeed(state: State) -> Page:
@@ -148,15 +153,16 @@ def player_succeed(state: State) -> Page:
 def gen_player_hand():
     hand = []
     for num in range(26):
-        hand.append(Card(randint(0, 13)))
+        hand.append(Card(randint(1, 13)))
     return hand
 
 
 def gen_dealer_hand():
     hand = []
     for num in range(26):
-        hand.append(Card(randint(0, 13)))
+        hand.append(Card(randint(1, 13)))
     return hand
+
 
 
 
@@ -180,15 +186,13 @@ eightyone = Rules("8111-", "A 1 placed on top of a 8, type '8111-'", False, "1",
 fake_mad = Rules("Ughh", "Anytime a 7 is placed on top of any card, type ' Ughh'", False, "7", "1,2,3,4,5,6,7,8,9,10,11,12,13")
 sixtyfive = Rules("What about me?", "A 5 is placed on top of a 6, type 'What about me?'", False, "5", "6")
 aceingthis = Rules("Ace of traits", "Anytime an Ace is placed on top of any card, type 'Ace of traits'", False, "1", "1,2,3,4,5,6,7,8,9,10,11,12,13")
-count_down = Rules("Step back son", "A card placed on top of a card of one lower value, type 'Step back son'", False, "2,3,4,5,6,7,8,9,10,11,12,13", "1,2,3,4,5,6,7,8,9,10,11,12")
-twins = Rules("TWINS!", "A card placed on top of itself, type 'TWINS!'", False, "1,2,3,4,5,6,7,8,9,10,11,12,13", "1,2,3,4,5,6,7,8,9,10,11,12,13")
 
 
 start_server(State(
     20,
     [royalty, s_and_s, goodbye, hello, s_and_n, two_twos, unlucky, lucky, wish, nineeleven,
      twenty_one, twenty_four, eighteen, king_queen, sixtysix, eightyone, fake_mad,
-     sixtyfive, aceingthis, count_down, twins],
+     sixtyfive, aceingthis],
     "1",
     [],
     []
